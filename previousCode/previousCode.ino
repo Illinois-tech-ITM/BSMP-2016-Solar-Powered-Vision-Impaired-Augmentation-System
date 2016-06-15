@@ -110,27 +110,10 @@ long averageDistance (long distanceArray[]) {
   return (total / 20);
 }
 
-//Do Ping for a pin and return distance based on the response time
+//Do Ping for a pin and return distance in cm, based on the response time
 long getDistance(int pingPin) {
-  pinMode(pingPin, OUTPUT);
-  digitalWrite(pingPin, LOW);
-  delayMicroseconds(2);
-  digitalWrite(pingPin, HIGH);
-  delayMicroseconds(5);
-  digitalWrite(pingPin, LOW);
-  pinMode(pingPin, INPUT);
-  
-  int duration = pulseIn(pingPin, HIGH, 5000);
-  long cm = microsecondsToCentimeters(duration);
+  long pulse = pulseIn(pingPin, HIGH);
+  long cm = (pulse / 147) * 2.54;
   return cm;
 }
 
-
-//calculates distance based on microseconds gathered from Ping
-long microsecondsToCentimeters(long microseconds)
-{
-  // The speed of sound is 340 m/s or 29 microseconds per centimeter.
-  // The ping travels out and back, so to find the distance of the
-  // object we take half of the distance travelled.
-  return microseconds / 29 / 2;
-}
