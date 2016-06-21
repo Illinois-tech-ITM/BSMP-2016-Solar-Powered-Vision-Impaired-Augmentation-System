@@ -4,16 +4,15 @@ https://github.com/jhajek/ITMT492-SPRING2015/blob/master/Clothing-Based-Proximit
 
 #define SIGNIFICANT_DISTANCE 10 //THIS IS HOW FAR DETECTION WILL CHANGE BEFORE WE UPDATE FREQUENCY TIMER
 SimpleTimer timer;
-int buttonPin = 11; //Button Pin
-int sensorsPin[3] = {12, 4, 6}; //Pins for each sensor
-int vibrationMotorPins[3] = {3, 5, 7}; //Pins for vibration motors
+int buttonPin = 2; //Button Pin
+int sensorsPin[3] = {10, 11, 12}; //Pins for each sensor
+int vibrationMotorPins[3] = {3, 5, 6}; //Pins for vibration motors - Have to be PWM pins.
 int distanceLevel[3]; //Array of frequencies for each side
 boolean on = false; //if touchpad is touched, switch this. if false, shut down vibrators.
-boolean tooFar[] = {true, true, true}; //if too far from sensor, don't attempt to vibrate
 long pingDistanceArray[3][20];
 int pingCounter[3];
 int pause[3];
-
+long distanceSum[3];
 boolean buttonState = 0; //True if button is pressed
 
 void setup() {
@@ -60,8 +59,8 @@ void checkTouchpad(){
 //pulses for only 20ms, then pauses
 // Vibrate if system is on, acording to the frequency
 void vibrate(int side) {
-  if (!tooFar[side] && on) {
-    if (pause[side] == distanceLevel[side]) {
+  if (!tooFar(side) && on) {
+    /*if (pause[side] == distanceLevel[side]) {
       digitalWrite(vibrationMotorPins[side], HIGH);
       pause[side]--;
     } else if (pause[side] < distanceLevel[side]) {
@@ -70,9 +69,11 @@ void vibrate(int side) {
     }
     if (pause[side] <= 0 || pause[side] >= distanceLevel[side]) {
       pause[side] = distanceLevel[side];
-    }
+    }*/
+    int vibeVal = map(averageDistance(side), 0, 70, 255, 0);
+    analogWrite(vibrationMotorPins[side], vibeVal);
   } else {
-    digitalWrite(vibrationMotorPins[side], LOW);
+    analogWrite(vibrationMotorPins[side], LOW);
   }
 }
 
@@ -80,9 +81,10 @@ void vibrate(int side) {
 //If change in distance is significant, then set frequency (distanceLevel)
 void pingDistance(int side) {
   long distance =  getDistance(sensorsPin[side]);
-
+  distanceSum[side] -= pingDistanceArray[side][pingCounter[side]];
+  distanceSum[side] += distance;
   pingDistanceArray[side][pingCounter[side]] = distance;
-  long avgDistance = averageDistance(pingDistanceArray[side]);
+  long avgDistance = averageDistance(side);
   int distanceValue;
 
   //ping counter is pingDistanceArray position
@@ -93,27 +95,45 @@ void pingDistance(int side) {
   }
 
   //now, see if we need to start vibrating, and if so, begin the vibrate timer for this side.
-  if (avgDistance <= 70 && avgDistance > 0) {
+  /*if (avgDistance <= 70 && avgDistance > 0) {
     distanceValue = avgDistance / SIGNIFICANT_DISTANCE;
     distanceLevel[side] = distanceValue;
-    tooFar[side] = false;
-  } else {
-    tooFar[side] = true;
-  }
+  } */
 }
 
-long averageDistance (long distanceArray[]) {
-  long total = 0;
-  for (int i = 0; i < 20; i++) {
-    total += distanceArray[i];
+//Check if ditance to object is irrelevant
+bool tooFar(int side) {
+  if (averageDistance(side) <= 70 && averageDistance(side) > 0) {
+    return false;
   }
-  return (total / 20);
+  return true;
 }
 
-//Do Ping for a pin and return distance in cm, based on the response time
+long averageDistance (int side) {
+  return distanceSum[side] / 20;
+}
+
+//Do Ping for a pin and return distance based on the response time
 long getDistance(int pingPin) {
-  long pulse = pulseIn(pingPin, HIGH);
-  long cm = (pulse / 147) * 2.54;
+  pinMode(pingPin, OUTPUT);
+  digitalWrite(pingPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(pingPin, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(pingPin, LOW);
+  pinMode(pingPin, INPUT);
+  
+  int duration = pulseIn(pingPin, HIGH, 5000);
+  long cm = microsecondsToCentimeters(duration);
   return cm;
 }
 
+
+//calculates distance based on microseconds gathered from Ping
+long microsecondsToCentimeters(long microseconds)
+{
+  // The speed of sound is 340 m/s or 29 microseconds per centimeter.
+  // The ping travels out and back, so to find the distance of the
+  // object we take half of the distance travelled.
+  return microseconds / 29 / 2;
+}
