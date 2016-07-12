@@ -1,80 +1,125 @@
 #include <SimpleTimer.h>
+#include <avr/sleep.h>
 /*This code was forked from github repo
-https://github.com/jhajek/ITMT492-SPRING2015/blob/master/Clothing-Based-Proximity-Sensors-for-the-Visually-Impaired/Final_Embeded/programCode.txt */
+  https://github.com/jhajek/ITMT492-SPRING2015/blob/master/Clothing-Based-Proximity-Sensors-for-the-Visually-Impaired/Final_Embeded/programCode.txt */
 
-#define SIGNIFICANT_DISTANCE 10 //THIS IS HOW FAR DETECTION WILL CHANGE BEFORE WE UPDATE FREQUENCY TIMER
+#define SIGNIFICANT_DISTANCE 50 //THIS IS HOW FAR DETECTION WILL CHANGE BEFORE WE UPDATE FREQUENCY TIMER
+#define maxDistance 200
 SimpleTimer timer;
-int buttonPin = 2; //Button Pin
+int buttonPin = 3; //Button Pin
 int sensorsPin[3] = {10, 11, 12}; //Pins for each sensor
-int vibrationMotorPins[3] = {3, 5, 6}; //Pins for vibration motors - Have to be PWM pins.
+int sensorPin = 7; //Pin to activate the sensors
+int vibrationMotorPins[3] = {4, 5, 6}; //Pins for vibration motors - Have to be PWM pins.
 int distanceLevel[3]; //Array of frequencies for each side
-boolean on = false; //if touchpad is touched, switch this. if false, shut down vibrators.
+volatile boolean on = true; //if touchpad is touched, switch this. if false, shut down vibrators.
 long pingDistanceArray[3][20];
 int pingCounter[3];
 int pause[3];
 long distanceSum[3];
-boolean buttonState = 0; //True if button is pressed
+int pointer=0;
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
-  pinMode(buttonPin, INPUT);
+  pinMode(buttonPin, INPUT_PULLUP); // https://www.arduino.cc/en/Tutorial/InputPullupSerial
   pinMode(vibrationMotorPins[0], OUTPUT);
   pinMode(vibrationMotorPins[1], OUTPUT);
   pinMode(vibrationMotorPins[2], OUTPUT);
-  timer.setInterval(20, vibrateAll);
-
+  pinMode(13, OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(buttonPin), checkButton, FALLING);
+  timer.setInterval(60, vibrateAll);
+  goToSleep();
 }
-
+long old;
 void loop() {
+  Serial.print("d:"+(String)(millis()-old)+"  ");
+  old=millis();
   // put your main code here, to run repeatedly:
   if (on) {
-  pingDistance(0);
-  pingDistance(1);
-  pingDistance(2);
+    pointer=pointer>2?0:pointer;
+    pingDistance(pointer++);
+    //pingDistance(1);
+    //pingDistance(2);
+    if(pointer==3)
+     Serial.println();
+  } else {
+    wait(500);
+    goToSleep();
   }
-  checkTouchpad();
   timer.run();
-  delay(3);
+  //delay(3);
 }
 
 //This function chcks all frequencies and vibrates according to the frequency values
-void vibrateAll() { 
+void vibrateAll() {
+  //digitalWrite(13,a);
   //timer (every 10 msec, if freq=0, vibrating, else not)
+  //Serial.print("aaaa");
   vibrate(0);
   vibrate(1);
   vibrate(2);
 }
 
-//This function checks if button is pressed and turns system on/of accordingly
-void checkTouchpad(){
-  boolean newState = (digitalRead(buttonPin) == HIGH) ? 1 : 0;
-  if(newState != buttonState && newState == 1){
-   on = !on;
-  }
-  buttonState = newState;
+void checkButton() {
+  on = false;
 }
 
+void goToSleep() {
+  for (int i = 0; i < 3; i++) {
+    analogWrite(vibrationMotorPins[i], LOW);
+  }
+    digitalWrite(sensorPin, LOW);
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);   // sleep mode is set here
+  sleep_mode(); // This macro automatically sets the sleep enable bit, goes to sleep, and clears the sleep enable bit.
+
+  //for (int i = 0; i < 3; i++) {
+    digitalWrite(sensorPin, HIGH);
+  //}
+  wait(500);
+  on = true;
+}
 
 //pulses for only 20ms, then pauses
 // Vibrate if system is on, acording to the frequency
 void vibrate(int side) {
-  if (!tooFar(side) && on) {
-    /*if (pause[side] == distanceLevel[side]) {
+  // Serial.println(on);
+//  if (!tooFar(side) && on) {
+//    if (pause[side] == distanceLevel[side]) {
+//      digitalWrite(vibrationMotorPins[side], HIGH);
+//      pause[side]--;
+//      } else if (pause[side] < distanceLevel[side]) {
+//      digitalWrite(vibrationMotorPins[side], LOW);
+//      pause[side]--;
+//      }
+//      if (pause[side] <= 0 || pause[side] >= distanceLevel[side]) {
+//      pause[side] = distanceLevel[side];
+//      }
+//    int vibeVal = map(averageDistance(side), 0, 70, 255, 50);
+//    analogWrite(vibrationMotorPins[side], vibeVal);
+//  } else {
+//    analogWrite(vibrationMotorPins[side], LOW);
+//  }
+ if (!tooFar(side) && on) {
+   // Serial.println("VIBRATE");
+    //turn on, decrease by 1
+
+
+    if (pause[side] == distanceLevel[side]) {
       digitalWrite(vibrationMotorPins[side], HIGH);
       pause[side]--;
     } else if (pause[side] < distanceLevel[side]) {
       digitalWrite(vibrationMotorPins[side], LOW);
       pause[side]--;
     }
-    if (pause[side] <= 0 || pause[side] >= distanceLevel[side]) {
+
+    if (pause[side] <= -1 || pause[side] >= distanceLevel[side]) {
       pause[side] = distanceLevel[side];
-    }*/
-    int vibeVal = map(averageDistance(side), 0, 70, 255, 0);
-    analogWrite(vibrationMotorPins[side], vibeVal);
+    }
+
   } else {
-    analogWrite(vibrationMotorPins[side], LOW);
+    digitalWrite(vibrationMotorPins[side], LOW);
   }
+
 }
 
 
@@ -84,47 +129,51 @@ void pingDistance(int side) {
   distanceSum[side] -= pingDistanceArray[side][pingCounter[side]];
   distanceSum[side] += distance;
   pingDistanceArray[side][pingCounter[side]] = distance;
-  long avgDistance = averageDistance(side);
-  int distanceValue;
+  //long avgDistance = averageDistance(side);
+  
 
   //ping counter is pingDistanceArray position
-  if (pingCounter[side] < 19) {
+  if (pingCounter[side] < 9) {
     pingCounter[side]++;
   } else {
     pingCounter[side] = 0;
   }
-
+Serial.print((String)averageDistance(side)+"   ");
   //now, see if we need to start vibrating, and if so, begin the vibrate timer for this side.
-  /*if (avgDistance <= 70 && avgDistance > 0) {
-    distanceValue = avgDistance / SIGNIFICANT_DISTANCE;
-    distanceLevel[side] = distanceValue;
-  } */
+  if (!tooFar(side)) {
+    distanceLevel[side] = averageDistance(side) / SIGNIFICANT_DISTANCE;
+    } 
 }
 
 //Check if ditance to object is irrelevant
 bool tooFar(int side) {
-  if (averageDistance(side) <= 70 && averageDistance(side) > 0) {
+  if (averageDistance(side) <= maxDistance && averageDistance(side) > 0) {
     return false;
   }
   return true;
 }
 
 long averageDistance (int side) {
-  return distanceSum[side] / 20;
+  return distanceSum[side] / 10;
 }
 
 //Do Ping for a pin and return distance based on the response time
 long getDistance(int pingPin) {
-  pinMode(pingPin, OUTPUT);
-  digitalWrite(pingPin, LOW);
-  delayMicroseconds(2);
-  digitalWrite(pingPin, HIGH);
-  delayMicroseconds(5);
-  digitalWrite(pingPin, LOW);
+    //digitalWrite(sensorPin, HIGH);
+//  pinMode(pingPin, OUTPUT);
+//  digitalWrite(pingPin, LOW);
+//  delayMicroseconds(2);
+//  digitalWrite(pingPin, HIGH);
+//  delayMicroseconds(10);
+//  digitalWrite(pingPin, LOW);
   pinMode(pingPin, INPUT);
-  
-  int duration = pulseIn(pingPin, HIGH, 5000);
-  long cm = microsecondsToCentimeters(duration);
+
+
+
+  long duration = pulseIn(pingPin, HIGH);
+  long cm = duration*2.54/147;//microsecondsToCentimeters(duration);
+ // pinMode(pingPin, OUTPUT);
+    //digitalWrite(sensorPin, LOW);
   return cm;
 }
 
@@ -136,4 +185,11 @@ long microsecondsToCentimeters(long microseconds)
   // The ping travels out and back, so to find the distance of the
   // object we take half of the distance travelled.
   return microseconds / 29 / 2;
+}
+
+
+void wait(long ms) {
+  long now = millis();
+  while (millis() - now < ms)
+    delay(1);
 }
