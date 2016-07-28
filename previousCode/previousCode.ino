@@ -5,8 +5,8 @@
 #define SIGNIFICANT_DISTANCE 50 // The distance value between vibration levels
 #define maxDistance 200 // The maximum distance to consider obstacles
 SimpleTimer timer; // Timer to synchronize the frequency of the vibration motors
-int sensorsPin[3] = {6, 11, 5}; // Pins for each sensor
-int vibrationMotorPins[3] = {7, 12, 4}; // Pins for vibration motors
+int sensorsPin[3] = {5, 10, 12}; // Pins for each sensor
+int vibrationMotorPins[3] = {6, 7, 11}; // Pins for vibration motors
 int distance[3]; // Distances from each sensor
 int distanceLevel[3]; // Array of frequencies for each side
 int pause[3]; // Variable used to synchronize the frequency of the vibration motors
