@@ -2,109 +2,76 @@
 /*This code was forked from github repo
   https://github.com/jhajek/ITMT492-SPRING2015/blob/master/Clothing-Based-Proximity-Sensors-for-the-Visually-Impaired/Final_Embeded/programCode.txt */
 
-#define SIGNIFICANT_DISTANCE 50 //THIS IS HOW FAR DETECTION WILL CHANGE BEFORE WE UPDATE FREQUENCY TIMER
-#define maxDistance 200
-SimpleTimer timer;
-int sensorsPin[3] = {10, 11, 12}; //Pins for each sensor
-int vibrationMotorPins[3] = {4, 5, 6}; //Pins for vibration motors - Have to be PWM pins.
-int distanceLevel[3]; //Array of frequencies for each side
-volatile boolean on = true; //if touchpad is touched, switch this. if false, shut down vibrators.
-long pingDistanceArray[3][20];
-int pingCounter[3];
-int pause[3];
-long distanceSum[3];
-int pointer = 0;
-int samples = 1;
+#define SIGNIFICANT_DISTANCE 50 // The distance value between vibration levels
+#define maxDistance 200 // The maximum distance to consider obstacles
+SimpleTimer timer; // Timer to synchronize the frequency of the vibration motors
+int sensorsPin[3] = {6, 11, 5}; // Pins for each sensor
+int vibrationMotorPins[3] = {7, 12, 4}; // Pins for vibration motors
+int distance[3]; // Distances from each sensor
+int distanceLevel[3]; // Array of frequencies for each side
+int pause[3]; // Variable used to synchronize the frequency of the vibration motors
+int pointer; // Variable to iterate sensors between loops
 
 void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(9600);
+  // Declare the vibration motors as output pins
   for (int i = 0; i < 3; i++)
     pinMode(vibrationMotorPins[i], OUTPUT);
-  pinMode(13, OUTPUT);
-  timer.setInterval(60, vibrateAll);
+  timer.setInterval(60, vibrateAll); // Set the period of vibrations
 }
-long old;
+
 void loop() {
-  Serial.print("d:" + (String)(millis() - old) + "  ");
-  old = millis();
-
-  pointer = pointer > 2 ? 0 : pointer;
-  pingDistance(pointer++);
-  if (pointer == 3)
-    Serial.println();
-
-  timer.run();
+  pingDistance(pointer++ % 3); // Check the distance of a sensor
+  timer.run(); // Vibrate all motors
 }
 
-//This function chcks all frequencies and vibrates according to the frequency values
+// This function checks all frequencies and vibrates according to the frequency values
 void vibrateAll() {
-  //timer (every 10 msec, if freq=0, vibrating, else not)
   for (int i = 0; i < 3; i++)
-    vibrate(i);
+    vibrate(i); // Vibrate each of the three motors
 }
 
-
-//pulses for only 20ms, then pauses
-// Vibrate if system is on, acording to the frequency
+// Vibrate if object is inside the maximum distance, acording to the frequency
+// Vibrates once and pauses for ((maxDistance / SIGNIFICANT_DISTANCE) - 1) periods, then restarts
 void vibrate(int side) {
-  if (!tooFar(side)) {
-    //turn on, decrease by 1
-    if (pause[side] == distanceLevel[side]) {
+  if (!tooFar(side)) { // Verify if it is inside the maximum distance
+    if (pause[side] == distanceLevel[side]) { // Vibrates once
       digitalWrite(vibrationMotorPins[side], HIGH);
       pause[side]--;
-    } else if (pause[side] < distanceLevel[side]) {
+    } else if (pause[side] < distanceLevel[side]) { // Pauses the vibration for the other periods
       digitalWrite(vibrationMotorPins[side], LOW);
       pause[side]--;
     }
-    if (pause[side] <= -1 || pause[side] >= distanceLevel[side]) {
+    if (pause[side] <= -1 || pause[side] >= distanceLevel[side]) { // Restarts the pause counter
       pause[side] = distanceLevel[side];
     }
-  } else {
+  } else { // Power off the motor if there is no obstacle in the maximum distance range
     digitalWrite(vibrationMotorPins[side], LOW);
   }
-
 }
 
 
-//If change in distance is significant, then set frequency (distanceLevel)
+// If change in distance is significant, then set frequency (distanceLevel)
+// Trigger each sensor, checks if it is inside the maximum distance range, and define the distanceLevel
 void pingDistance(int side) {
-  long distance =  getDistance(sensorsPin[side]);
-  distanceSum[side] -= pingDistanceArray[side][pingCounter[side]];
-  distanceSum[side] += distance;
-  pingDistanceArray[side][pingCounter[side]] = distance;
-
-  //ping counter is pingDistanceArray position
-  if (pingCounter[side] < samples - 1) {
-    pingCounter[side]++;
-  } else {
-    pingCounter[side] = 0;
-  }
-  Serial.print((String)averageDistance(side) + "   ");
-  //now, see if we need to start vibrating, and if so, begin the vibrate timer for this side.
+  distance[side] =  getDistance(sensorsPin[side]);
   if (!tooFar(side)) {
-    distanceLevel[side] = averageDistance(side) / SIGNIFICANT_DISTANCE;
+    distanceLevel[side] = distance[side] / SIGNIFICANT_DISTANCE;
   }
 }
 
-//Check if ditance to object is irrelevant
-bool tooFar(int side) {
-  if (averageDistance(side) <= maxDistance && averageDistance(side) > 0) {
-    return false;
-  }
-  return true;
-}
-
-long averageDistance (int side) {
-  return distanceSum[side] / samples;
-}
-
-//Do Ping for a pin and return distance based on the response time
+// Sends a pulse to the sensor and return the distance in centimeters based on the response time from the sensor
 long getDistance(int pingPin) {
   pinMode(pingPin, INPUT);
-
   long duration = pulseIn(pingPin, HIGH);
   long cm = duration * 2.54 / 147;
   return cm;
+}
+
+// Check if ditance to object is irrelevant
+bool tooFar(int side) {
+  if (distance[side] <= maxDistance && distance[side] > 0) {
+    return false;
+  }
+  return true;
 }
 
